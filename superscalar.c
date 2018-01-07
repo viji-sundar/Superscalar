@@ -93,6 +93,12 @@ void issue (sscPT sscP)
          instructP->exitIS  = sscP->cycleCount;
          pushTail(sscP->executeList, instructP);
          n++;
+         if(instructP->oprType == 2 && sscP->cachel1 != NULL) {
+            if(!read(sscP->cachel1, instructP->memAddr)) 
+               instructP->exDelay = (sscP->cachel2 != NULL) ? (read(sscP->cachel2, instructP->memAddr) ? 10 : 20) : 20;
+            else
+               instructP->exDelay = 5;
+         }
       }
       else
          count++;
@@ -187,6 +193,7 @@ bool fetch (sscPT sscP)  {
       instructP->readyS1   = 1;
       instructP->readyS2   = 1;
       instructP->enterIF   = sscP->cycleCount;
+      instructP->memAddr   = mem;
 
       switch(oprType) {
          case 0:  instructP->exDelay = 1;
@@ -204,11 +211,14 @@ bool fetch (sscPT sscP)  {
 }
 
 /*!proto*/
-sscPT sscAllocate (int s, int n, FILE* trace, bool (*readTrace)(FILE* , int* , int* , int* , int* , int* , int* )) 
+sscPT sscAllocate (int s, int n, int bSize, int l1Size, int l1Assoc, int l2Size, int l2Assoc, FILE* trace, 
+                   bool (*readTrace)(FILE* , int* , int* , int* , int* , int* , int* )) 
 /*!endproto*/
 {
 
    sscPT sscP                       = (sscPT)calloc(1, sizeof(sscT));
+   sscP->cachel1                    = cacheAllocate(l1Size, bSize, l1Assoc, WBWA, LRU);
+   sscP->cachel2                    = cacheAllocate(l2Size, bSize, l2Assoc, WBWA, LRU);
    sscP->s                          = s;
    sscP->n                          = n;
    sscP->trace                      = trace;

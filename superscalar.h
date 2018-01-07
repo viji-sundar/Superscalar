@@ -2,6 +2,7 @@
 #include<stdlib.h>
 #include<malloc.h>
 #include "ll.h"
+#include "cache.h"
 
 #define IF 0
 #define ID 1
@@ -26,6 +27,7 @@ typedef struct _instructT{
    int          src2New;
    int          tagD;
    int          pc;
+   int          memAddr;
 
    int          exDelay;
 
@@ -55,6 +57,8 @@ typedef struct _sscT{
    int          s;
    
    rfT          registerFile[N_REGS];
+   cachePT      cachel1;
+   cachePT      cachel2;
 
    int          cycleCount;
    int          instCount;
