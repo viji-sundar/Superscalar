@@ -27,6 +27,8 @@ typedef struct _instructT{
    int          tagD;
    int          pc;
 
+   int          exDelay;
+
    int          enterIF;
    int          exitIF;
    int          enterID;

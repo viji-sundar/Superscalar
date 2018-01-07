@@ -3,6 +3,21 @@
 //fakeRetire
 // Remove instructions from the head of fake ROB until an instruction 
 // is reached that is not in the WB state
+void fakeRetire (sscPT sscP) {
+   while(1) {
+      instructPT iP = peekHead (sscP->fakeRob);
+      if(iP == NULL && iP->state != WB) return;
+      popHead (sscP->fakeRob);
+      printf("%d fu{%d} src{%d, %d} dst{%d} IF{%d, %d} ID{%d, %d} IS{%d, %d} EX{%d, %d} WB{%d, %d}\n",
+            iP->tagD, iP->oprType, iP->src1Reg, iP->src2Reg, iP->destReg, 
+            iP->enterIF, (iP->exitIF-iP->enterIF), 
+            iP->enterID, (iP->exitID-iP->enterID),
+            iP->enterIS, (iP->exitIS-iP->enterIS),
+            iP->enterEX, (iP->exitEX-iP->enterEX),
+            iP->enterWB, (iP->exitWB-iP->enterWB));
+                                  
+   }
+}
 
 //execute
 // From the executeList, check for instructions that are finishing
@@ -12,10 +27,37 @@
 // 3) Update the register file state (e.g., ready flag) and wakeup
 //    dependent instructions (set their operand ready flags)
 
+void wakeUp (void* data, void* userData)
+{
+   instructPT instructISP   = data;
+   instructPT instructEXP   = userData;
+   if(instructEXP->destReg != NO_REG) {
+      if(instructP->src1Reg != NO_REG && instructEXP->tagD == instructISP->src1New)
+        instructP->readyS1  = 1;
+      if(instructP->src2Reg != NO_REG && instructEXP->tagD == instructISP->src2New)
+         instructP->readyS2 = 1; 
+   }
+}
+
 // Remove all EX and transition in program order
 void execute (sscPT sscP) {
-
-
+   int count = 0;
+   int inst  = sscP->n;
+   while(--inst) {
+      instructPT instructP  = peekNth(sscP->executeList, count);
+      if(instructP == NULL) return;
+      if((sscP->cycleCount - instructP->enterEX) >= instructP->exDelay) {
+         popNth(sscP->executeList, count);
+         if(instructP->destReg != NO_REG && sscP->registerFile[instructP->destReg].tag == instructP->tagD)
+            sscP->registerFile[instructP->destReg].ready = 1;
+         forEach (sscP->issueList, instructP, wakeUp);
+         instructP->state   = WB;
+         instructP->enterWB = sscP->cycleCount;
+         instructP->exitEX  = sscP->cycleCount;
+      }
+      else
+         count++;
+   }
 }
 
 //issue
@@ -101,9 +143,9 @@ void dispatch (sscPT sscP)
          instructP->readyS2 = sscP->registerFile[instructP->src2Reg].ready;
          instructP->src2New = sscP->registerFile[instructP->src2Reg].tag;
       }
-      if(instructP->dstReg != NO_REG) {
-         sscP->registerFile[instructP->dstReg].ready   = 0;
-         sscP->registerFile[instructP->dstReg].tag     = instructP->tagD;
+      if(instructP->destReg != NO_REG) {
+         sscP->registerFile[instructP->destReg].ready   = 0;
+         sscP->registerFile[instructP->destReg].tag     = instructP->tagD;
       }
       pushTail(sscP->issueList, instructP);
    }
@@ -122,12 +164,12 @@ void dispatch (sscPT sscP)
 // 2) Add the instruction to the dispatchList and reserve a
 //    dispatch queue entry (e.g., increment a count of the number
 //    of instructions in the dispatch queue)
-void fetch (sscPT sscP)  {
+bool fetch (sscPT sscP)  {
    int inst                = sscP->n;
-   while(--inst && listNodeCount(sscP->dispatchList) >= 2*(sscP->n)) {
+   while(--inst && listNodeCount(sscP->dispatchList) < 2*(sscP->n)) {
       int pc, oprType, dst, src1, src2, mem;
       bool cond            = readTrace(&pc, &oprType, &dst, &src1, &src2, &mem);
-      if (!cond) return; 
+      if (!cond) return false; 
       instructPT instructP = (instructPT)calloc(1, sizeof(instructT));
       instructP->state     = IF;
       instructP->oprType   = oprType;
@@ -140,9 +182,19 @@ void fetch (sscPT sscP)  {
       instructP->readyS2   = 1;
       instructP->enterIF   = sscP->cycleCount;
 
+      switch(oprType) {
+         case 0:  instructP->exDelay = 1;
+                  break;
+         case 1:  instructP->exDelay = 2;
+                  break;
+         default: instructP->exDelay = 5;
+                  break;
+      }
+
       pushTail(sscP->fakeRob, instructP);
       pushTail(sscP->dispatchList, instructP);
    }
+   return true;
 }
 
 sscPT sscAllocate (int s, int n) {
@@ -159,4 +211,17 @@ sscPT sscAllocate (int s, int n) {
       sscP->registerFile[i].ready   = 1;
    }
    return sscP;
+}
+
+void simulate (sscPT sscP) 
+{
+   bool endOfTrace = false;
+   do {
+      fakeRetire(sscP);
+      execute(sscP);
+      issue(sscP);
+      dispatch(sscP);
+      endOfTrace = !fetch(sscP);
+      instructP->cycleCount++;
+   }while(listNodeCount(sscP->fakeRob) != 0 && !endOfTrace);
 }
