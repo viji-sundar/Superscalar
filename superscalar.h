@@ -58,5 +58,9 @@ typedef struct _sscT{
 
    int          cycleCount;
    int          instCount;
+   FILE*        trace;
+   bool         (*readTrace)(FILE*, int*, int*, int*, int*, int*, int*); // readTracePT readTraceP;
 
 }sscT;
+
+#include "build/superscalar_proto.h"

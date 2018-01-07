@@ -5,17 +5,17 @@
 // is reached that is not in the WB state
 void fakeRetire (sscPT sscP) {
    while(1) {
+      //printf("fakeRetire\n");
       instructPT iP = peekHead (sscP->fakeRob);
-      if(iP == NULL && iP->state != WB) return;
+      if(iP == NULL || iP->state != WB) return;
       popHead (sscP->fakeRob);
-      printf("%d fu{%d} src{%d, %d} dst{%d} IF{%d, %d} ID{%d, %d} IS{%d, %d} EX{%d, %d} WB{%d, %d}\n",
+      printf("%d fu{%d} src{%d,%d} dst{%d} IF{%d,%d} ID{%d,%d} IS{%d,%d} EX{%d,%d} WB{%d,%d}\n",
             iP->tagD, iP->oprType, iP->src1Reg, iP->src2Reg, iP->destReg, 
             iP->enterIF, (iP->exitIF-iP->enterIF), 
             iP->enterID, (iP->exitID-iP->enterID),
             iP->enterIS, (iP->exitIS-iP->enterIS),
             iP->enterEX, (iP->exitEX-iP->enterEX),
             iP->enterWB, (iP->exitWB-iP->enterWB));
-                                  
    }
 }
 
@@ -32,18 +32,18 @@ void wakeUp (void* data, void* userData)
    instructPT instructISP   = data;
    instructPT instructEXP   = userData;
    if(instructEXP->destReg != NO_REG) {
-      if(instructP->src1Reg != NO_REG && instructEXP->tagD == instructISP->src1New)
-        instructP->readyS1  = 1;
-      if(instructP->src2Reg != NO_REG && instructEXP->tagD == instructISP->src2New)
-         instructP->readyS2 = 1; 
+      if(instructISP->src1Reg != NO_REG && instructEXP->tagD == instructISP->src1New)
+         instructISP->readyS1  = 1;
+      if(instructISP->src2Reg != NO_REG && instructEXP->tagD == instructISP->src2New)
+         instructISP->readyS2 = 1; 
    }
 }
 
 // Remove all EX and transition in program order
 void execute (sscPT sscP) {
    int count = 0;
-   int inst  = sscP->n;
-   while(--inst) {
+   while(1) {
+      //printf("execute\n");
       instructPT instructP  = peekNth(sscP->executeList, count);
       if(instructP == NULL) return;
       if((sscP->cycleCount - instructP->enterEX) >= instructP->exDelay) {
@@ -53,6 +53,7 @@ void execute (sscPT sscP) {
          forEach (sscP->issueList, instructP, wakeUp);
          instructP->state   = WB;
          instructP->enterWB = sscP->cycleCount;
+         instructP->exitWB  = instructP->enterWB+1; //hardcoded delay to model 1 cycle in WB
          instructP->exitEX  = sscP->cycleCount;
       }
       else
@@ -80,8 +81,10 @@ void issue (sscPT sscP)
 /*!endproto*/
 {
    int count = 0;
-   while( listNodeCount(sscP->executeList) < sscP->n ) {
+   int n     = 0;
+   while( n < sscP->n ) {
       instructPT instructP  = peekNth(sscP->issueList, count);
+      //printf("issue, %d %d %d %p\n", sscP->n, sscP->s, listNodeCount(sscP->issueList), instructP);
       if(instructP == NULL) return;
       if(instructP->readyS1 && instructP->readyS2) {
          popNth(sscP->issueList, count);
@@ -89,6 +92,7 @@ void issue (sscPT sscP)
          instructP->enterEX = sscP->cycleCount;
          instructP->exitIS  = sscP->cycleCount;
          pushTail(sscP->executeList, instructP);
+         n++;
       }
       else
          count++;
@@ -116,6 +120,7 @@ void issue (sscPT sscP)
 void trans (void* data, void* userData)
 {
    instructPT instructP  = data;
+   sscPT sscP            = userData;
    if( instructP->state == IF ){
       instructP->state   = ID;
       instructP->exitIF  = sscP->cycleCount;
@@ -129,9 +134,9 @@ void dispatch (sscPT sscP)
 {
    while(listNodeCount(sscP->issueList) < (sscP->s)) {
       instructPT instructP = peekHead(sscP->dispatchList);
-      if(instructP->state != ID) break;
+      if(instructP == NULL || instructP->state != ID) break;
       popHead(sscP->dispatchList);
-      instructP->state = IS;
+      instructP->state   = IS;
       instructP->enterIS = sscP->cycleCount;
       instructP->exitID  = sscP->cycleCount;
       //check for Dst and Src operands
@@ -148,8 +153,9 @@ void dispatch (sscPT sscP)
          sscP->registerFile[instructP->destReg].tag     = instructP->tagD;
       }
       pushTail(sscP->issueList, instructP);
+      //printf("dispatch %p\n", instructP);
    }
-   forEach (sscP->dispatchList, NULL, trans);
+   forEach (sscP->dispatchList, sscP, trans);
 }
 
 
@@ -166,9 +172,9 @@ void dispatch (sscPT sscP)
 //    of instructions in the dispatch queue)
 bool fetch (sscPT sscP)  {
    int inst                = sscP->n;
-   while(--inst && listNodeCount(sscP->dispatchList) < 2*(sscP->n)) {
+   while(inst-- && listNodeCount(sscP->dispatchList) < 2*(sscP->n)) {
       int pc, oprType, dst, src1, src2, mem;
-      bool cond            = readTrace(&pc, &oprType, &dst, &src1, &src2, &mem);
+      bool cond            = (*sscP->readTrace)(sscP->trace, &pc, &oprType, &dst, &src1, &src2, &mem);
       if (!cond) return false; 
       instructPT instructP = (instructPT)calloc(1, sizeof(instructT));
       instructP->state     = IF;
@@ -197,11 +203,16 @@ bool fetch (sscPT sscP)  {
    return true;
 }
 
-sscPT sscAllocate (int s, int n) {
+/*!proto*/
+sscPT sscAllocate (int s, int n, FILE* trace, bool (*readTrace)(FILE* , int* , int* , int* , int* , int* , int* )) 
+/*!endproto*/
+{
 
    sscPT sscP                       = (sscPT)calloc(1, sizeof(sscT));
    sscP->s                          = s;
    sscP->n                          = n;
+   sscP->trace                      = trace;
+   sscP->readTrace                  = readTrace;
    sscP->dispatchList               = createList();
    sscP->issueList                  = createList();
    sscP->executeList                = createList();
@@ -213,7 +224,9 @@ sscPT sscAllocate (int s, int n) {
    return sscP;
 }
 
+/*!proto*/
 void simulate (sscPT sscP) 
+/*!endproto*/
 {
    bool endOfTrace = false;
    do {
@@ -222,6 +235,6 @@ void simulate (sscPT sscP)
       issue(sscP);
       dispatch(sscP);
       endOfTrace = !fetch(sscP);
-      instructP->cycleCount++;
-   }while(listNodeCount(sscP->fakeRob) != 0 && !endOfTrace);
+      sscP->cycleCount++;
+   }while(listNodeCount(sscP->fakeRob) != 0 || !endOfTrace);
 }

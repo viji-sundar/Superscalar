@@ -64,7 +64,7 @@ void printList (listPT listP, listDirT dir)
    ASSERT ( !listP, "List not allocated" );
    nodePT currentP    = (dir == LIST_DIR_FWD) ? listP->headP : listP->tailP; 
    while( currentP != NULL ) {
-      printf("%d\n", *((int*)(currentP->data)));
+      printf("%p\n", (currentP->data));
       currentP        = (dir == LIST_DIR_FWD) ? currentP->nextP : currentP->prevP;
    }
 }
@@ -123,10 +123,10 @@ bool pushNth ( listPT listP, int n, void* data )
 /*!endproto*/
 {
    ASSERT ( !listP, "List not allocated" );
-   if(!(n >= 0 && n <= listP->count))
+   if(n < 0 || n >= listP->count)
       return false;
 
-   if(n == listP->count) 
+   if(n == listP->count - 1) 
       return pushTail ( listP, data );
    if(n == 0)
       return pushHead ( listP, data );
@@ -209,8 +209,8 @@ void* popNth (listPT listP, int n)
 /*!endproto*/
 {
    ASSERT ( !listP, "List not allocated" );
-   if(!(n >= 0 && n <= listP->count)) return NULL;
-   if(n == listP->count)              return popTail (listP);
+   if(n < 0 || n >= listP->count)     return NULL;
+   if(n == listP->count - 1)          return popTail (listP);
    if(n == 0)                         return popHead (listP);
    nodePT currentP         = listP->headP;
 
@@ -242,8 +242,8 @@ void* peekNth (listPT listP, int n)
 /*!endproto*/
 {
    ASSERT ( !listP, "List not allocated" );
-   if(!(n >= 0 && n <= listP->count)) return NULL;
-   if(n == listP->count)              return peekTail (listP);
+   if(n < 0 || n >= listP->count)     return NULL;
+   if(n == listP->count - 1)          return peekTail (listP);
    if(n == 0)                         return peekHead (listP);
 
    nodePT currentP         = listP->headP;
