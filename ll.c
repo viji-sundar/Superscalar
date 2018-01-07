@@ -181,6 +181,14 @@ void* peekHead (listPT listP)
 }
 
 /*!proto*/
+void* peekTail (listPT listP)
+/*!endproto*/
+{
+   ASSERT ( !listP, "List not allocated" );
+   return (listP->tailP == NULL) ? NULL : listP->tailP->data;
+}
+
+/*!proto*/
 void* popTail (listPT listP) 
 /*!endproto*/
 {
@@ -227,6 +235,24 @@ void* popNth (listPT listP, int n)
    listP->count--;
    free(currentP);
    return data;
+}
+
+/*!proto*/
+void* peekNth (listPT listP, int n)
+/*!endproto*/
+{
+   ASSERT ( !listP, "List not allocated" );
+   if(!(n >= 0 && n <= listP->count)) return NULL;
+   if(n == listP->count)              return peekTail (listP);
+   if(n == 0)                         return peekHead (listP);
+
+   nodePT currentP         = listP->headP;
+   while(n--) currentP     = currentP->nextP;
+
+   ASSERT ( currentP->nextP == NULL, "Unexpected next null found" );
+   ASSERT ( currentP->prevP == NULL, "Unexpected prev null found" );
+   
+   return currentP->data;
 }
 
 /*!proto*/

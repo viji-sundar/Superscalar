@@ -13,6 +13,10 @@
 //    dependent instructions (set their operand ready flags)
 
 // Remove all EX and transition in program order
+void execute (sscPT sscP) {
+
+
+}
 
 //issue
 // From the issueList, construct a temp list of instructions whose
@@ -27,10 +31,26 @@
 // 4) Set a timer in the instruction’s data structure that will allow
 //    you to model the execution latency
 // Clear the old list
-void issue (sscPT sscP) {
-   instructPT instructP = peekHead(sscP->issueList);
 
 
+/*!proto*/
+void issue (sscPT sscP) 
+/*!endproto*/
+{
+   int count = 0;
+   while( listNodeCount(sscP->executeList) < sscP->n ) {
+      instructPT instructP  = peekNth(sscP->issueList, count);
+      if(instructP == NULL) return;
+      if(instructP->readyS1 && instructP->readyS2) {
+         popNth(sscP->issueList, count);
+         instructP->state   = EX;
+         instructP->enterEX = sscP->cycleCount;
+         instructP->exitIS  = sscP->cycleCount;
+         pushTail(sscP->executeList, instructP);
+      }
+      else
+         count++;
+   }
 }
 
 //dispatch
@@ -44,16 +64,21 @@ void issue (sscPT sscP) {
 //    queue) and free a dispatch queue entry (e.g. decrement a count of
 //    the number of instructions in the dispatch queue).
 // 2) Transition from the ID state to the IS state.
-// 3)TODO: Rename source operands by looking up state in the register
+// 3) Rename source operands by looking up state in the register
 //    file; rename destination operands by updating state in
 //    the register file.
 // For instructions in the dispatchList that are in the IF
 // state, unconditionally transition to the ID state (models the 1 cycle
 // latency for instruction fetch)
+
 void trans (void* data, void* userData)
 {
-   instructPT instructP = data;
-   instructP->state     = ID;
+   instructPT instructP  = data;
+   if( instructP->state == IF ){
+      instructP->state   = ID;
+      instructP->exitIF  = sscP->cycleCount;
+      instructP->enterID = sscP->cycleCount;
+   }
 }
 
 /*!proto*/
@@ -62,9 +87,24 @@ void dispatch (sscPT sscP)
 {
    while(listNodeCount(sscP->issueList) < (sscP->s)) {
       instructPT instructP = peekHead(sscP->dispatchList);
-      if(instructP->state != ID) return;
+      if(instructP->state != ID) break;
       popHead(sscP->dispatchList);
       instructP->state = IS;
+      instructP->enterIS = sscP->cycleCount;
+      instructP->exitID  = sscP->cycleCount;
+      //check for Dst and Src operands
+      if(instructP->src1Reg != NO_REG) {
+         instructP->readyS1 = sscP->registerFile[instructP->src1Reg].ready;
+         instructP->src1New = sscP->registerFile[instructP->src1Reg].tag;
+      }
+      if(instructP->src2Reg != NO_REG) {
+         instructP->readyS2 = sscP->registerFile[instructP->src2Reg].ready;
+         instructP->src2New = sscP->registerFile[instructP->src2Reg].tag;
+      }
+      if(instructP->dstReg != NO_REG) {
+         sscP->registerFile[instructP->dstReg].ready   = 0;
+         sscP->registerFile[instructP->dstReg].tag     = instructP->tagD;
+      }
       pushTail(sscP->issueList, instructP);
    }
    forEach (sscP->dispatchList, NULL, trans);
@@ -95,8 +135,11 @@ void fetch (sscPT sscP)  {
       instructP->src1Reg   = src1;
       instructP->src2Reg   = src2;
       instructP->pc        = pc;
-      instructP->tag       = sscP->instCount++;
-      
+      instructP->tagD      = sscP->instCount++;
+      instructP->readyS1   = 1;
+      instructP->readyS2   = 1;
+      instructP->enterIF   = sscP->cycleCount;
+
       pushTail(sscP->fakeRob, instructP);
       pushTail(sscP->dispatchList, instructP);
    }

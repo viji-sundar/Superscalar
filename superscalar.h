@@ -9,6 +9,7 @@
 #define EX 3
 #define WB 4
 #define N_REGS 128
+#define NO_REG -1
 
 typedef struct _instructT*    instructPT;
 typedef struct _sscT*         sscPT;
@@ -18,9 +19,24 @@ typedef struct _instructT{
    int          oprType;
    int          destReg;
    int          src1Reg;
+   int          readyS1;
+   int          src1New;
    int          src2Reg;
-   int          tag;
+   int          readyS2;
+   int          src2New;
+   int          tagD;
    int          pc;
+
+   int          enterIF;
+   int          exitIF;
+   int          enterID;
+   int          exitID;
+   int          enterIS;
+   int          exitIS;
+   int          enterEX;
+   int          exitEX;
+   int          enterWB;
+   int          exitWB;
 }instructT;
 
 typedef struct _rfT{
